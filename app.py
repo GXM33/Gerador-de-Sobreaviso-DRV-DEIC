@@ -1,13 +1,20 @@
 import streamlit as st
-import json
-from datetime import datetime, timedelta
-from typing import Dict, List
+from datetime import datetime
 import pytz
 
-# Configuração da página
-st.set_page_config(page_title="Gerador de Sobreaviso DRV/DEIC", layout="wide")
+# ============================================
+# CONFIG PAGE
+# ============================================
+st.set_page_config(
+    page_title="Gerador de Sobreaviso DRV/DEIC",
+    page_icon="📅",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-# Dados (constants)
+# ============================================
+# DADOS (Constants)
+# ============================================
 PEOPLE = [
     {"val": "Cau", "label": "Insp. Acauã"},
     {"val": "Saraiva", "label": "Esc. Anderson Saraiva"},
@@ -110,16 +117,26 @@ SCHEDULE = {
 
 DATES = sorted(SCHEDULE.keys(), key=lambda x: datetime.strptime(x, "%d/%m/%Y"))
 
+# ============================================
+# FUNÇÕES AUXILIARES
+# ============================================
+
 def get_day_of_week(date_str: str) -> str:
     """Retorna o dia da semana em português"""
     date_obj = datetime.strptime(date_str, "%d/%m/%Y")
-    days = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", 
+    days = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
             "sexta-feira", "sábado", "domingo"]
     return days[date_obj.weekday()]
 
-def build_message(date: str, custom_schedule: List[str] = None, include_weekday: bool = False) -> str:
+def get_today_brasilia():
+    """Retorna a data de hoje em Brasília"""
+    tz = pytz.timezone('America/Sao_Paulo')
+    today = datetime.now(tz).strftime("%d/%m/%Y")
+    return today
+
+def build_message(date: str, custom_schedule=None, include_weekday: bool = False) -> str:
     """Constrói a mensagem de sobreaviso"""
-    escala = custom_schedule or SCHEDULE.get(date)
+    escala = custom_schedule if custom_schedule is not None else SCHEDULE.get(date)
     
     if not escala:
         return "Nenhum sobreaviso encontrado para essa data ou seleção."
@@ -132,136 +149,284 @@ def build_message(date: str, custom_schedule: List[str] = None, include_weekday:
     
     text = f"*Sobreaviso DRV/DEIC*\nData: {date}{weekday_str}\n\n"
     
-    if sa01 and NAME_MAP.get(sa01):
+    if sa01 and sa01 in NAME_MAP:
         text += f"{NAME_MAP[sa01]}\n{PHONE_MAP.get(sa01, '-')}\n\n"
     
-    if sa02 and NAME_MAP.get(sa02):
+    if sa02 and sa02 in NAME_MAP:
         text += f"{NAME_MAP[sa02]}\n{PHONE_MAP.get(sa02, '-')}\n\n"
     
-    if sa_nac and NAME_MAP.get(sa_nac):
+    if sa_nac and sa_nac in NAME_MAP:
         text += f"NAC: {NAME_MAP[sa_nac]}\n{PHONE_MAP.get(sa_nac, '-')}\n\n"
     
     text += "Chefe de SI: Com. Bruna Caldeira\n(51) 99139-9403\n\nAutoridade Policial:\nDel. Jeiselaure de Souza\n(51) 99145-8919"
     
     return text
 
-# Inicializar estado da session
+# ============================================
+# INICIALIZAR SESSION STATE
+# ============================================
+
 if "output_text" not in st.session_state:
     st.session_state.output_text = ""
-if "tab" not in st.session_state:
-    st.session_state.tab = "data"
 
-# Header
-st.title("📅 Gerador de Sobreaviso DRV/DEIC")
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "data"
+
+if "today" not in st.session_state:
+    st.session_state.today = get_today_brasilia()
+
+# ============================================
+# HEADER
+# ============================================
+
+st.markdown("""
+<style>
+    .main-header {
+        text-align: center;
+        font-size: 2.5em;
+        font-weight: bold;
+        margin-bottom: 0.5em;
+        color: #1f2937;
+    }
+    .subheader {
+        text-align: center;
+        font-size: 0.9em;
+        color: #6b7280;
+        margin-bottom: 2em;
+    }
+    .tab-button {
+        padding: 12px 24px;
+        font-size: 1em;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin: 0 5px;
+        font-weight: 600;
+    }
+    .tab-active {
+        background-color: #3b82f6;
+        color: white;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+    .tab-inactive {
+        background-color: #e5e7eb;
+        color: #374151;
+    }
+    .tab-inactive:hover {
+        background-color: #d1d5db;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    st.markdown('<p class="main-header">📅 Gerador de Sobreaviso</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header" style="font-size: 1.8em; margin-top: -0.5em;">DRV/DEIC</p>', unsafe_allow_html=True)
+    st.markdown('<p class="subheader">Hoje: ' + st.session_state.today + ' (' + get_day_of_week(st.session_state.today) + ')</p>', unsafe_allow_html=True)
+
 st.markdown("---")
 
-# Tabs
+# ============================================
+# TABS
+# ============================================
+
 tab1, tab2, tab3 = st.tabs(["📅 Buscar por Data", "👤 Buscar por Pessoa", "🔄 Trocas"])
 
+# ============================================
+# TAB 1: BUSCAR POR DATA
+# ============================================
+
 with tab1:
-    st.subheader("Buscar por Data")
-    selected_date = st.selectbox("Selecione a data:", DATES, key="date_select")
+    st.subheader("📅 Buscar por Data")
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        # Tentar colocar data de hoje como padrão
+        today_date = st.session_state.today
+        if today_date in DATES:
+            default_index = DATES.index(today_date)
+        else:
+            default_index = 0
+        
+        selected_date = st.selectbox(
+            "Selecione a data:",
+            DATES,
+            index=default_index,
+            key="date_select"
+        )
+    
+    with col2:
+        if st.button("🔄 Mostrar", key="btn_date"):
+            pass
     
     if selected_date:
         st.session_state.output_text = build_message(selected_date)
 
+# ============================================
+# TAB 2: BUSCAR POR PESSOA
+# ============================================
+
 with tab2:
-    st.subheader("Buscar por Pessoa")
+    st.subheader("👤 Buscar por Pessoa")
+    
+    col1, col2 = st.columns([3, 1])
+    
     person_names = [p["label"] for p in PEOPLE]
-    selected_person_label = st.selectbox("Selecione uma pessoa:", person_names, key="person_select")
+    
+    with col1:
+        selected_person_label = st.selectbox(
+            "Selecione uma pessoa:",
+            person_names,
+            key="person_select"
+        )
+    
+    with col2:
+        if st.button("🔄 Mostrar", key="btn_person"):
+            pass
     
     if selected_person_label:
-        selected_person = next(p["val"] for p in PEOPLE if p["label"] == selected_person_label)
+        selected_person = next((p["val"] for p in PEOPLE if p["label"] == selected_person_label), None)
         
-        result = ""
-        nov_count = 0
-        dec_count = 0
-        dates_found = []
-        
-        for date in DATES:
-            if selected_person in SCHEDULE[date]:
-                dates_found.append(date)
-                if "/11/" in date:
-                    nov_count += 1
-                elif "/12/" in date:
-                    dec_count += 1
-        
-        if not dates_found:
-            result = "Nenhum sobreaviso encontrado para essa pessoa."
-        else:
-            result = f"Novembro: {nov_count} sobreavisos\n"
-            result += f"Dezembro: {dec_count} sobreavisos\n\n"
-            result += "════════════════════════════════════════\n\n"
+        if selected_person:
+            result = ""
+            nov_count = 0
+            dec_count = 0
+            dates_found = []
             
-            for i, date in enumerate(dates_found):
-                if i > 0:
-                    result += "\n\n════════════════════════════════════════\n\n"
-                result += build_message(date, include_weekday=True)
-        
-        st.session_state.output_text = result
+            for date in DATES:
+                if selected_person in SCHEDULE[date]:
+                    dates_found.append(date)
+                    if "/11/" in date:
+                        nov_count += 1
+                    elif "/12/" in date:
+                        dec_count += 1
+            
+            if not dates_found:
+                result = "❌ Nenhum sobreaviso encontrado para essa pessoa."
+            else:
+                result = f"📊 **Novembro:** {nov_count} sobreavisos\n"
+                result += f"📊 **Dezembro:** {dec_count} sobreavisos\n\n"
+                result += "════════════════════════════════════════\n\n"
+                
+                for i, date in enumerate(dates_found):
+                    if i > 0:
+                        result += "\n\n════════════════════════════════════════\n\n"
+                    result += build_message(date, include_weekday=True)
+            
+            st.session_state.output_text = result
+
+# ============================================
+# TAB 3: TROCAS
+# ============================================
 
 with tab3:
-    st.subheader("Fazer Trocas")
-    swap_date = st.selectbox("Selecione a data da troca:", DATES, key="swap_date_select")
+    st.subheader("🔄 Fazer Trocas")
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        swap_date = st.selectbox(
+            "Selecione a data da troca:",
+            DATES,
+            key="swap_date_select"
+        )
+    
+    with col2:
+        if st.button("🔄 Mostrar", key="btn_swap"):
+            pass
     
     if swap_date:
-        st.info(f"Escala original para {swap_date}: {', '.join([NAME_MAP.get(p, 'Vago') for p in SCHEDULE[swap_date] if p])}")
+        original_escala = SCHEDULE[swap_date]
+        st.info(f"**Escala original para {swap_date}:**\n" +
+                "\n".join([f"Posição {i+1}: {NAME_MAP.get(p, '(vago)')}" for i, p in enumerate(original_escala)]))
         
         swaps = {}
+        
         for i in range(3):
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                original = SCHEDULE[swap_date][i] if i < len(SCHEDULE[swap_date]) else ""
+                original = original_escala[i] if i < len(original_escala) else ""
                 original_label = NAME_MAP.get(original, "Vago")
                 st.write(f"**Pos. {i+1}:** {original_label}")
             
             with col2:
-                person_names_with_empty = ["--- Manter Original ---"] + person_names
-                selected_swap = st.selectbox(f"Substituto #{i+1}:", person_names_with_empty, key=f"swap_{i}")
+                person_options = ["--- Manter Original ---"] + person_names
+                selected_swap = st.selectbox(
+                    f"Substituto para posição {i+1}:",
+                    person_options,
+                    key=f"swap_{i}"
+                )
                 
                 if selected_swap != "--- Manter Original ---":
-                    swaps[i] = next(p["val"] for p in PEOPLE if p["label"] == selected_swap)
+                    swaps[i] = next((p["val"] for p in PEOPLE if p["label"] == selected_swap), None)
         
         if st.button("📝 Gerar texto com trocas", key="apply_swaps"):
-            custom_schedule = list(SCHEDULE[swap_date])
+            custom_schedule = list(original_escala)
             for idx, person in swaps.items():
                 if idx < len(custom_schedule):
                     custom_schedule[idx] = person
             
             st.session_state.output_text = build_message(swap_date, custom_schedule)
 
+# ============================================
+# OUTPUT AREA
+# ============================================
+
 st.markdown("---")
 
-# Output Area
 st.subheader("📋 Resultado")
-output_textarea = st.text_area("Texto gerado:", value=st.session_state.output_text, height=200, disabled=False)
 
-# Atualizar output quando text_area mudar
-st.session_state.output_text = output_textarea
+output_text = st.text_area(
+    "Texto gerado:",
+    value=st.session_state.output_text,
+    height=200,
+    label_visibility="collapsed",
+    key="output_area"
+)
 
-# Action Buttons
-col1, col2, col3 = st.columns(3)
+st.session_state.output_text = output_text
+
+# ============================================
+# ACTION BUTTONS
+# ============================================
+
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    if st.button("📋 Copiar para Clipboard", use_container_width=True):
-        st.success("✅ Use Ctrl+C (ou Cmd+C) para copiar o texto acima!")
+    if st.button("📋 Copiar Texto", use_container_width=True):
+        st.success("✅ Copie o texto acima com Ctrl+C (ou Cmd+C)")
 
 with col2:
-    if st.button("💚 Enviar no WhatsApp", use_container_width=True):
-        if output_textarea:
-            # Abrir WhatsApp Web
-            st.markdown(f"""
-            <a href="https://wa.me/?text={output_textarea.replace(chr(10), '%0A')}" target="_blank">
-                <button>Abrir WhatsApp</button>
-            </a>
-            """, unsafe_allow_html=True)
-            st.info("Se não abrir automaticamente, clique no link acima")
+    if st.button("💚 WhatsApp", use_container_width=True):
+        if output_text:
+            wa_link = f"https://wa.me/?text={output_text.replace(chr(10), '%0A')}"
+            st.markdown(f"[Abrir WhatsApp]({wa_link})", unsafe_allow_html=True)
+        else:
+            st.warning("Gere um texto primeiro!")
 
 with col3:
-    if st.button("🗑️ Limpar", use_container_width=True):
+    if st.button("📱 Compartilhar", use_container_width=True):
+        if output_text:
+            st.info("Copie o texto acima e compartilhe via SMS ou Email")
+        else:
+            st.warning("Gere um texto primeiro!")
+
+with col4:
+    if st.button("🗑️ Limpar Tudo", use_container_width=True):
         st.session_state.output_text = ""
         st.rerun()
 
+# ============================================
+# FOOTER
+# ============================================
+
 st.markdown("---")
-st.markdown("🔒 **Aplicação segura e protegida.** Código não é acessível.")
+st.markdown("""
+<div style="text-align: center; color: #6b7280; font-size: 0.85em; margin-top: 2em;">
+    🔒 <strong>Aplicação segura e protegida.</strong> Código não é acessível.<br>
+    Desenvolvido especialmente para DRV/DEIC
+</div>
+""", unsafe_allow_html=True)
